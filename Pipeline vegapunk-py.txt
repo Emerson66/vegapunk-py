@@ -1,0 +1,59 @@
+1. Inicialização e Preparação de Contexto (Setup)
+Esta fase ocorre uma vez por sessão de usuário, configurando os recursos de dados e o contexto para a IA.
+
+
+Conexão com o Banco de Dados: Estabelece a conexão com o banco de dados selecionado (SQLite ou PostgreSQL).
+
+
+Extração do Esquema: O sistema lê todas as tabelas, colunas e, crucialmente, os relacionamentos (chaves estrangeiras) do banco de dados. O resultado é cacheado para garantir alta performance.
+
+Carregamento de Feedback: O aplicativo lê o arquivo exemplos_validados.jsonl para carregar exemplos de consultas que foram previamente marcadas como corretas (👍).
+
+
+Indexação RAG Aprimorada: O esquema do banco de dados e os exemplos validados são transformados em embeddings e armazenados no ChromaDB, criando um "cérebro" de contexto que combina conhecimento estrutural e prático.
+
+Geração de Sugestões Dinâmicas: A IA analisa uma amostra do esquema e gera sugestões de consulta inteligentes e relevantes para o banco de dados conectado, que são exibidas como botões para o usuário.
+
+2. Geração de Resposta da IA (Ciclo Interativo)
+Esta é a fase principal, acionada quando o usuário solicita a geração de um SQL.
+
+
+Entrada do Usuário: O usuário insere uma consulta em linguagem natural na caixa de texto.
+
+Recuperação (RAG): O ChromaDB realiza uma busca vetorial e recupera os trechos do esquema do banco e os exemplos validados que são mais relevantes para a pergunta do usuário.
+
+
+Construção do Prompt: O contexto recuperado é combinado com a consulta do usuário e um conjunto robusto de instruções de "processo de raciocínio". O prompt instrui a IA a gerar uma resposta estruturada contendo o raciocínio, uma descrição e o SQL.
+
+
+Chamada LLM com Streaming: O prompt é enviado ao modelo de IA selecionado (OpenAI ou Groq). A resposta é recebida em tempo real (streaming) e exibida na tela palavra por palavra, criando uma experiência de usuário mais dinâmica.
+
+Parsing da Resposta: O texto completo recebido do streaming é analisado para extrair separadamente o raciocínio, a descrição e o código SQL.
+
+3. Validação, Execução e Visualização
+A fase final, focada na interação do usuário com os resultados e na segurança.
+
+Exibição da Resposta da IA: O sistema exibe a descrição em linguagem natural e o raciocínio da IA (em uma seção expansível), juntamente com o código SQL gerado.
+
+Ação do Usuário (Edição ou Execução): O usuário tem duas opções:
+
+Editar: Clicar no botão "✏️ Editar" para ajustar manualmente o SQL antes da execução.
+
+
+Executar: Clicar para prosseguir com a execução.
+
+Análise de Performance (EXPLAIN): Ao clicar em "Executar", o sistema primeiro envia um comando EXPLAIN para o PostgreSQL. Se a consulta for estimada como muito "cara" (lenta), um aviso é exibido, pedindo confirmação do usuário antes de prosseguir.
+
+
+Execução Segura: Se a consulta for considerada segura e rápida (ou se o usuário confirmar), o comando SQL é finalmente executado no banco de dados.
+
+
+Visualização Aprimorada: Os resultados são carregados em um DataFrame do Pandas e exibidos de várias formas:
+
+Uma tabela interativa (st.dataframe).
+
+Um gráfico de barras automático, se os dados forem compatíveis.
+
+Botões para exportar os dados nos formatos CSV, JSON e Excel.
+
+Ciclo de Feedback: Após a visualização dos resultados, o usuário pode clicar nos botões 👍 / 👎. O feedback é salvo nos arquivos .jsonl, que serão usados para aprimorar o contexto da IA na próxima sessão.

@@ -1,0 +1,40 @@
+# Ambientes Virtuais
+# Ignora as pastas que contêm as bibliotecas Python instaladas.
+.venv/
+venv/
+env/
+.env
+
+# Arquivos de Cache e Compilados do Python
+# Ignora arquivos temporários que o Python gera.
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+
+# Arquivos de Configuração Secretos
+# NUNCA envie suas chaves de API para o repositório.
+.streamlit/secrets.toml
+
+# Banco de Dados de Vetores (ChromaDB)
+# Ignora a pasta onde o ChromaDB salva seus dados.
+chroma/
+.chroma/
+
+# Arquivos de Feedback Gerados
+# Ignora os logs de feedback positivo e negativo.
+*.jsonl
+
+# Bancos de Dados Locais
+# Ignora arquivos de banco de dados de teste ou temporários.
+*.db
+*.sqlite
+*.sqlite3
+
+# Arquivos de IDE e Sistema
+# Ignora arquivos de configuração específicos do seu editor de código e sistema operacional.
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
