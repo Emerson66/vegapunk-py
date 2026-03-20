@@ -8,12 +8,10 @@ import io
 import chromadb
 import re
 
-# ATUALIZADO: Removemos as importações relacionadas ao gráfico
 from utils_db import get_database_schema, execute_sql, index_schema_in_chromadb
 from utils_ai import generate_sql_with_rag_stream, parse_ai_response, generate_dynamic_suggestions
 from feedback import save_feedback, load_validated_examples
 
-# --- Configuração da Página e Estado da Sessão ---
 st.set_page_config(page_title="Sistema Text-to-SQL", layout="wide")
 
 if 'history' not in st.session_state:
@@ -43,7 +41,6 @@ def init_chromadb():
         collection = client.create_collection("database_schemas")
     return collection
 
-# --- Interface Principal ---
 def main():
     st.title("🗄️ Sistema de Relatórios Personalizados")
     st.markdown("**Gere relatórios SQL a partir de linguagem natural (SOMENTE CONSULTAS)**")
