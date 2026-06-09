@@ -9,7 +9,7 @@ import groq
 def _build_client(provider: str, api_key: str):
     """Retorna (client, model_name) para o provedor escolhido."""
     if provider == "Groq":
-        return groq.Groq(api_key=api_key), "openai/gpt-oss-120b"
+        return groq.Groq(api_key=api_key), "llama-3.3-70b-versatile"
     return openai.OpenAI(api_key=api_key), "gpt-4o"
 
 def generate_sql_with_rag_stream(user_query, collection, provider, api_key):
@@ -18,7 +18,7 @@ def generate_sql_with_rag_stream(user_query, collection, provider, api_key):
         yield "❌ Erro: Configure sua chave de API na sidebar."
         return
 
-    results = collection.query(query_texts=[user_query], n_results=5)
+    results = collection.query(query_texts=[user_query], n_results=8)
     context = "ESQUEMA E RELACIONAMENTOS DO BANCO DE DADOS:\n\n" + "\n---\n".join(results['documents'][0])
     
     prompt = f"""
@@ -38,8 +38,17 @@ Siga o processo de raciocínio abaixo para converter a solicitação do usuário
 3.  **Filtros (WHERE):** A solicitação implica algum filtro?
 4.  **Colunas Duplicadas:** Se usar `JOIN`, liste as colunas explicitamente e use apelidos (`AS`) para renomear colunas com nomes iguais (ex: `f.id AS filme_id`).
 5.  **VERIFICAÇÃO FINAL DE UNICIDADE (REGRA CRÍTICA):** Antes de finalizar, revise a lista de colunas no `SELECT`. É absolutamente proibido ter nomes de colunas duplicados no resultado final, mesmo após usar `AS`.
-6.  **Seleção Mínima de Colunas (REGRA CRÍTICA):** Selecione APENAS as colunas que respondem diretamente à pergunta do usuário. Nunca inclua campos extras como `id`, `created_at` ou outros não solicitados. Se o usuário pede "título e diretor", retorne exatamente essas duas colunas e nenhuma outra.
-7.  **Descrição:** Crie uma frase curta em português descrevendo o que a consulta SQL fará.
+6.  **Seleção Mínima de Colunas (REGRA CRÍTICA):** Selecione APENAS as colunas que respondem diretamente à pergunta. Siga estas regras por tipo de pergunta:
+    - "Quais X com [condição]?" → retorne apenas o nome/título de X e o campo da condição (ex: `titulo, duracao_em_minutos`). Nunca todos os campos.
+    - "Liste todas as X" sem especificação → retorne os 2-3 atributos mais descritivos; nunca chaves estrangeiras internas, `created_at` ou campos técnicos.
+    - "Qual X realizou o maior/menor [ação]?" → inclua SEMPRE o identificador/nome de X, os atributos descritivos das tabelas JOINadas que contextualizam X (ex: titulo do filme, nome da sala) E o valor do agregado.
+    - "Qual X com [filtro] teve [métrica]?" → inclua o ID de X, campos descritivos de tabelas relacionadas (nome, titulo) e a métrica calculada.
+    - Agregações com `GROUP BY` → inclua no SELECT apenas o campo de agrupamento descritivo (nunca IDs numéricos extras) + o agregado.
+7.  **Nomes Descritivos vs IDs:** Em resultados, prefira `nome`, `titulo` em vez de IDs numéricos. Nunca adicione um campo `id` ou chave estrangeira ao SELECT a não ser que a pergunta peça explicitamente.
+8.  **Tipo de JOIN:** Use `INNER JOIN` por padrão. Use `LEFT JOIN` apenas quando a pergunta pedir EXPLICITAMENTE registros sem correspondência (ex: "filmes sem sessões", "salas sem reservas", "inclua os que não têm"). Para "quantas X cada Y possui?" ou "para cada Y, qual o total de X?", use `INNER JOIN` — retorne apenas os Y que possuem ao menos um X.
+9.  **ENUM — NUNCA traduza (REGRA CRÍTICA):** Use os valores de ENUM EXATAMENTE como aparecem no esquema. Se o esquema mostra `ENUM(CONFIRMED, CANCELLED, PENDING)`, use `'CONFIRMED'`, NUNCA `'confirmada'` ou variações em português.
+10. **Formato de datas/meses:** Para perguntas sobre meses, use `TO_CHAR(coluna, 'YYYY-MM')` — retorna string legível como `'2025-01'`. Nunca use `EXTRACT(MONTH ...)` que retorna apenas o número do mês.
+11. **Descrição:** Crie uma frase curta em português descrevendo o que a consulta SQL fará.
 
 ### APLICAÇÃO:
 **SOLICITAÇÃO DO USUÁRIO:** "{user_query}"
@@ -61,7 +70,7 @@ Siga o processo de raciocínio abaixo para converter a solicitação do usuário
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            max_tokens=2048,
+            max_tokens=4096,
             stream=True,
         )
         

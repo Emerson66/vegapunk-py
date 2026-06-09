@@ -48,7 +48,7 @@ def main():
         api_provider = st.selectbox("Provedor de API", ["Groq", "OpenAI"])
 
         if api_provider == "Groq":
-            model_in_use = "openai/gpt-oss-120b"
+            model_in_use = "llama-3.3-70b-versatile"
         else:
             model_in_use = "gpt-4o"
         st.caption(f"🤖 Modelo em uso: {model_in_use}")
