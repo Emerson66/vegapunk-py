@@ -25,6 +25,13 @@ chroma/
 # Ignora os logs de feedback positivo e negativo.
 *.jsonl
 
+# Relatórios do benchmark (gerados automaticamente pelo benchmark_runner.py)
+relatorio_benchmark_*.md
+relatorio_benchmark_*.csv
+
+# Contexto interno do Claude Code
+.claude/
+
 # Bancos de Dados Locais
 # Ignora arquivos de banco de dados de teste ou temporários.
 *.db
