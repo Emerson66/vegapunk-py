@@ -1,10 +1,9 @@
 # utils_db.py
 
-import re;
+import re
 import streamlit as st
 import pandas as pd
 from sqlalchemy import text, exc
-import json
 
 def get_database_schema(_conn, db_type='sqlite'):
     """Lê o esquema completo, usando 'schema.tabela' como chave única para evitar sobrescritas."""
@@ -22,23 +21,65 @@ def get_database_schema(_conn, db_type='sqlite'):
     else: # PostgreSQL
         tables_query = text("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema');")
         df_tables = pd.read_sql(tables_query, _conn)
+        # pg_catalog é acessível a qualquer usuário (inclusive read-only),
+        # ao contrário de information_schema.constraint_column_usage que filtra por ownership
         fk_query = text("""
-            SELECT tc.table_schema, tc.table_name, kcu.column_name, 
-                   ccu.table_schema AS foreign_table_schema, ccu.table_name AS foreign_table_name, ccu.column_name AS foreign_column_name 
-            FROM information_schema.table_constraints AS tc 
-            JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-            JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-            WHERE tc.constraint_type = 'FOREIGN KEY';
+            SELECT
+                n.nspname                          AS table_schema,
+                tc.relname                         AS table_name,
+                a.attname                          AS column_name,
+                rn.nspname                         AS foreign_table_schema,
+                rc.relname                         AS foreign_table_name,
+                ra.attname                         AS foreign_column_name
+            FROM pg_constraint c
+            JOIN pg_class     tc ON tc.oid = c.conrelid
+            JOIN pg_namespace  n ON  n.oid = tc.relnamespace
+            JOIN pg_class     rc ON rc.oid = c.confrelid
+            JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+            JOIN pg_attribute  a ON  a.attrelid = c.conrelid
+                                 AND a.attnum    = ANY(c.conkey)
+            JOIN pg_attribute ra ON ra.attrelid = c.confrelid
+                                 AND ra.attnum   = ANY(c.confkey)
+            WHERE c.contype = 'f'
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema');
         """)
         df_fks = pd.read_sql(fk_query, _conn)
+
+        # Melhoria 1: captura valores reais dos ENUMs para incluir no contexto do RAG
+        try:
+            enum_query = text("""
+                SELECT t.typname, e.enumlabel
+                FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid
+                ORDER BY t.typname, e.enumsortorder
+            """)
+            df_enums = pd.read_sql(enum_query, _conn)
+            enum_map = {}
+            for _, erow in df_enums.iterrows():
+                enum_map.setdefault(erow['typname'], []).append(erow['enumlabel'])
+        except Exception:
+            enum_map = {}
+
         for _, row in df_tables.iterrows():
             table_schema, table_name = row['table_schema'], row['table_name']
             full_table_name = f"{table_schema}.{table_name}"
             table_map[table_name] = full_table_name
             
-            cols_query = text(f"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '{table_schema}' AND table_name = '{table_name}';")
-            df_columns = pd.read_sql(cols_query, _conn)
-            
+            cols_query = text("""
+                SELECT column_name, data_type, udt_name
+                FROM information_schema.columns
+                WHERE table_schema = :schema AND table_name = :table
+                ORDER BY ordinal_position
+            """)
+            df_columns = pd.read_sql(cols_query, _conn, params={"schema": table_schema, "table": table_name})
+
+            columns = []
+            for _, col in df_columns.iterrows():
+                col_type = col['data_type']
+                if col_type == 'USER-DEFINED':
+                    vals = enum_map.get(col['udt_name'], [])
+                    col_type = f"ENUM({', '.join(vals)})" if vals else col_type
+                columns.append({"name": col['column_name'], "type": col_type})
+
             relationships = []
             table_fks = df_fks[(df_fks['table_schema'] == table_schema) & (df_fks['table_name'] == table_name)]
             for _, fk_row in table_fks.iterrows():
@@ -51,9 +92,10 @@ def get_database_schema(_conn, db_type='sqlite'):
             schema_info[full_table_name] = {
                 "schema": table_schema,
                 "table_name": table_name,
-                "columns": [{"name": col['column_name'], "type": col['data_type']} for _, col in df_columns.iterrows()],
+                "columns": columns,
                 "relationships": relationships
             }
+
     return schema_info, table_map
 
 def index_schema_in_chromadb(collection, schema_info, db_type='sqlite', validated_examples=None):
@@ -83,7 +125,6 @@ def execute_sql(conn, sql_query, analyze_only=False, cost_limit=100000):
 
     # Verificação de segurança aprimorada com expressões regulares
     forbidden_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE", "ALTER", "CREATE"]
-    # O padrão \b garante que estamos procurando por palavras inteiras e isoladas
     pattern = r"\b(" + "|".join(forbidden_keywords) + r")\b"
     
     if re.search(pattern, clean_query):

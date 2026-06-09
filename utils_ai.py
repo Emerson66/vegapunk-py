@@ -1,10 +1,16 @@
-# utils_ai.py
-
+import ast
+import re
+import random
 import streamlit as st
 import openai
 import groq
-import re
-import random
+
+
+def _build_client(provider: str, api_key: str):
+    """Retorna (client, model_name) para o provedor escolhido."""
+    if provider == "Groq":
+        return groq.Groq(api_key=api_key), "openai/gpt-oss-120b"
+    return openai.OpenAI(api_key=api_key), "gpt-4o"
 
 def generate_sql_with_rag_stream(user_query, collection, provider, api_key):
     """Gera SQL usando uma chamada de API com streaming e retorna o conteúdo."""
@@ -32,7 +38,8 @@ Siga o processo de raciocínio abaixo para converter a solicitação do usuário
 3.  **Filtros (WHERE):** A solicitação implica algum filtro?
 4.  **Colunas Duplicadas:** Se usar `JOIN`, liste as colunas explicitamente e use apelidos (`AS`) para renomear colunas com nomes iguais (ex: `f.id AS filme_id`).
 5.  **VERIFICAÇÃO FINAL DE UNICIDADE (REGRA CRÍTICA):** Antes de finalizar, revise a lista de colunas no `SELECT`. É absolutamente proibido ter nomes de colunas duplicados no resultado final, mesmo após usar `AS`.
-6.  **Descrição:** Crie uma frase curta em português descrevendo o que a consulta SQL fará.
+6.  **Seleção Mínima de Colunas (REGRA CRÍTICA):** Selecione APENAS as colunas que respondem diretamente à pergunta do usuário. Nunca inclua campos extras como `id`, `created_at` ou outros não solicitados. Se o usuário pede "título e diretor", retorne exatamente essas duas colunas e nenhuma outra.
+7.  **Descrição:** Crie uma frase curta em português descrevendo o que a consulta SQL fará.
 
 ### APLICAÇÃO:
 **SOLICITAÇÃO DO USUÁRIO:** "{user_query}"
@@ -49,9 +56,7 @@ Siga o processo de raciocínio abaixo para converter a solicitação do usuário
 </sql>
 """
     try:
-        client = groq.Groq(api_key=api_key) if provider == "Groq" else openai.OpenAI(api_key=api_key)
-        model_name = "openai/gpt-oss-120b" if provider == "Groq" else "gpt-4o"
-        
+        client, model_name = _build_client(provider, api_key)
         stream = client.chat.completions.create(
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
@@ -103,15 +108,13 @@ REGRAS:
 - Retorne APENAS uma lista Python de strings. Exemplo: ["Pergunta 1", "Pergunta 2", "Pergunta 3"]
 """
     try:
-        client = groq.Groq(api_key=api_key) if provider == "Groq" else openai.OpenAI(api_key=api_key)
-        model_name = "openai/gpt-oss-120b" if provider == "Groq" else "gpt-4o"
+        client, model_name = _build_client(provider, api_key)
         response = client.chat.completions.create(model=model_name, messages=[{"role": "user", "content": prompt}], temperature=0.5, max_tokens=200)
-        
         response_text = response.choices[0].message.content.strip()
-        suggestions_list = eval(response_text)
+        suggestions_list = ast.literal_eval(response_text)
         if isinstance(suggestions_list, list) and all(isinstance(item, str) for item in suggestions_list):
             return suggestions_list[:3]
-    except:
+    except Exception:
         pass
     
     return default_suggestions

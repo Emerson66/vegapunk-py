@@ -6,7 +6,6 @@ import sqlite3
 from sqlalchemy import create_engine
 import io
 import chromadb
-import re
 
 from utils_db import get_database_schema, execute_sql, index_schema_in_chromadb
 from utils_ai import generate_sql_with_rag_stream, parse_ai_response, generate_dynamic_suggestions
@@ -22,7 +21,6 @@ if 'user_query' not in st.session_state:
 def set_query_from_history(query):
     st.session_state.user_query = query
 
-# --- Funções de Cache Específicas do App ---
 @st.cache_resource
 def init_demo_database():
     conn = sqlite3.connect(":memory:", check_same_thread=False)
@@ -70,7 +68,6 @@ def main():
             db_connection_params['password'] = st.text_input("Senha", type="password")
         
         if st.button("Conectar ao Banco de Dados", type="primary"):
-            # Limpa todos os estados relacionados à conexão e esquema anteriores
             for key in ['db_connection', 'connection_active', 'schema_info', 'table_map', 'schema_indexed']:
                 st.session_state.pop(key, None)
             
@@ -87,7 +84,7 @@ def main():
                         st.sidebar.error(f"Falha na conexão: {e}")
                 else:
                     st.sidebar.warning("Preencha todos os campos de conexão.")
-            else: # SQLite
+            else:
                 st.session_state.db_connection = init_demo_database()
                 st.session_state.db_type = 'sqlite'
                 st.session_state.connection_active = True
@@ -96,9 +93,8 @@ def main():
 
         if st.session_state.get('connection_active'):
             if st.button("🔄 Atualizar Esquema do Banco"):
-                st.session_state.pop('schema_info', None)
-                st.session_state.pop('table_map', None)
-                st.session_state.pop('schema_indexed', None)
+                for key in ('schema_info', 'table_map', 'schema_indexed', 'suggestions'):
+                    st.session_state.pop(key, None)
                 st.toast("Esquema do banco de dados será atualizado.")
                 st.rerun()
 
@@ -137,8 +133,10 @@ def main():
         st.subheader("💬 Consulta em Linguagem Natural")
         st.text_area("Digite sua consulta:", height=100, key="user_query", label_visibility="collapsed")
         
-        with st.spinner("Gerando sugestões inteligentes..."):
-            suggestions = generate_dynamic_suggestions(schema_info, api_provider, api_key)
+        if 'suggestions' not in st.session_state:
+            with st.spinner("Gerando sugestões inteligentes..."):
+                st.session_state.suggestions = generate_dynamic_suggestions(schema_info, api_provider, api_key)
+        suggestions = st.session_state.suggestions
         st.caption("Sugestões:")
         s_cols = st.columns(len(suggestions) if suggestions else 1)
         if suggestions:
