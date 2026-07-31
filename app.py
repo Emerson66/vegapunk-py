@@ -81,7 +81,20 @@ def main():
                         st.sidebar.success("✅ Conectado ao PostgreSQL!")
                         st.rerun()
                     except Exception as e:
-                        st.sidebar.error(f"Falha na conexão: {e}")
+                        msg = str(e).lower()
+                        if "password authentication failed" in msg:
+                            friendly = "❌ Senha incorreta para o usuário informado."
+                        elif "role" in msg and "does not exist" in msg:
+                            friendly = "❌ Usuário não encontrado no banco de dados."
+                        elif "database" in msg and "does not exist" in msg:
+                            friendly = "❌ Banco de dados não encontrado. Verifique o nome."
+                        elif "connection refused" in msg or "could not connect" in msg or "connection to server" in msg:
+                            friendly = "❌ Não foi possível conectar ao servidor. Verifique se o banco está rodando e se o host/porta estão corretos."
+                        elif "timeout" in msg:
+                            friendly = "❌ Tempo esgotado ao conectar. O servidor demorou demais para responder."
+                        else:
+                            friendly = "❌ Falha na conexão. Verifique os dados e tente novamente."
+                        st.sidebar.error(friendly)
                 else:
                     st.sidebar.warning("Preencha todos os campos de conexão.")
             else:
