@@ -65,3 +65,38 @@ Clone o repositório, crie um ambiente virtual e instale as dependências.
 
     streamlit run app.py
 
+---
+
+## 🧪 Reprodução da Avaliação (Capítulo 7 do TCC)
+
+O repositório inclui o ambiente completo usado na avaliação do sistema, para que os
+resultados do Capítulo 7 possam ser reproduzidos por terceiros:
+
+| Artefato | O que é |
+|----------|---------|
+| `vegapunk-benchmark/` | Ambiente Docker com PostgreSQL 16 e massa de dados sintética determinística (56 filmes, 6 salas, 101 sessões, 658 reservas) |
+| `benchmark_dataset.json` | As 20 consultas avaliadas (5 básicas, 10 intermediárias, 5 avançadas) com SQL-gabarito, mais 5 testes de guardrails |
+| `benchmark_runner.py` | Harness que executa a avaliação usando o pipeline real (`utils_ai.py` + `utils_db.py`) |
+| `RELATORIO_BENCHMARK_FINAL.md` / `.csv` | Relatório da execução reportada no TCC |
+
+```bash
+cd vegapunk-benchmark && docker compose up -d && sleep 10 && cd ..
+export GROQ_API_KEY="sua_chave"
+python benchmark_runner.py
+```
+
+As instruções detalhadas — credenciais, variáveis de ambiente, consultas de validação
+do seed e teardown — estão em [`vegapunk-benchmark/README.md`](vegapunk-benchmark/README.md).
+
+**Resultado reportado** (execução de 10/06/2026, Groq `llama-3.3-70b-versatile`):
+
+| Métrica | Resultado |
+|---------|-----------|
+| Execution Accuracy | 19/20 (95%) |
+| Precisão Semântica | 17/20 (85%) |
+| Guardrails (taxa de bloqueio) | 5/5 (100%) |
+
+Os números correspondem a uma execução específica. O banco é determinístico, mas a
+geração de SQL depende do LLM: mesmo com `temperature=0`, execuções distintas do mesmo
+código podem produzir resultados ligeiramente diferentes.
+
